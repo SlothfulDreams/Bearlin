@@ -5,10 +5,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import Check from 'lucide-react-native/icons/check';
 import ChevronLeft from 'lucide-react-native/icons/chevron-left';
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
-import FastForward from 'lucide-react-native/icons/fast-forward';
 import Pause from 'lucide-react-native/icons/pause';
 import Play from 'lucide-react-native/icons/play';
-import Rewind from 'lucide-react-native/icons/rewind';
 import X from 'lucide-react-native/icons/x';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -46,6 +44,7 @@ export default function ReaderScreen() {
   const setReaderTheme = (value: 'paper' | 'sepia' | 'night') => updatePreferences({ readerTheme: value });
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [chapterComplete, setChapterComplete] = useState(false);
+  const [selectedSentenceId, setSelectedSentenceId] = useState<string>();
   const [selectedEntryId, setSelectedEntryId] = useState<string>();
   const narration = useNarrationPlayer(chapter.data?.audio, undefined, 0, preferences.playbackRate);
 
@@ -80,6 +79,7 @@ export default function ReaderScreen() {
   const activeTokenId = pageSentences.flatMap((item) => item.tokens).find((token) => (
     token.audioStartMs !== undefined && token.audioEndMs !== undefined && narration.positionMs >= token.audioStartMs && narration.positionMs < token.audioEndMs
   ))?.id;
+  const selectedSentence = pageSentences.find((item) => item.id === selectedSentenceId) ?? pageSentences[0];
 
   if (chapter.isPending || detail.isPending) {
     return <ReaderState background={readerColors.background} text="Preparing chapter…" />;
@@ -100,6 +100,7 @@ export default function ReaderScreen() {
   const goToPage = (nextPage: number) => {
     if (nextPage < 0 || nextPage >= readerPages.length) return;
     setPage(nextPage);
+    setSelectedSentenceId(readerPages[nextPage][0]?.id);
     narration.seekToMs(readerPages[nextPage][0]?.audioStartMs ?? 0);
   };
 
@@ -179,16 +180,36 @@ export default function ReaderScreen() {
         </View>
         <View className="px-4 pb-2"><ProgressBar value={progress} /></View>
 
-        <Pressable
-          accessibilityRole="switch"
-          accessibilityState={{ checked: translationVisible }}
-          accessibilityLabel={translationVisible ? 'Hide English translations' : 'Show English translations'}
-          onPress={() => setTranslationVisible(!translationVisible)}
-          className="min-h-12 flex-row items-center justify-between border-y px-6"
-          style={{ borderColor: theme.border }}>
-          <ThemedText type="smallBold" style={{ color: readerColors.text }}>Translations</ThemedText>
-          <ThemedText type="smallBold" style={{ color: theme.primary }}>{translationVisible ? 'Hide English' : 'Show English'}</ThemedText>
-        </Pressable>
+        {translationVisible && selectedSentence ? (
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: true }}
+            accessibilityLabel={`English translation: ${selectedSentence.translation}`}
+            accessibilityHint="Double tap to hide the translation"
+            onPress={() => setTranslationVisible(false)}
+            className="min-h-[88px] justify-center border-b px-6 py-4"
+            style={{ borderBottomColor: theme.border }}>
+            <ThemedText
+              style={{
+                color: readerColors.text,
+                fontSize: Math.max(18, fontSize - 2),
+                lineHeight: Math.max(28, fontSize * 1.35),
+              }}>
+              {selectedSentence.translation}
+            </ThemedText>
+          </Pressable>
+        ) : (
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: false }}
+            accessibilityLabel="Show English translation"
+            onPress={() => setTranslationVisible(true)}
+            className="min-h-12 flex-row items-center justify-between border-b px-6"
+            style={{ borderBottomColor: theme.border }}>
+            <ThemedText type="small" style={{ color: readerColors.muted }}>Tap a sentence to translate</ThemedText>
+            <ThemedText type="smallBold" style={{ color: theme.primary }}>Show English</ThemedText>
+          </Pressable>
+        )}
 
         <ScrollView
           key={`${chapterId}-${page}`}
@@ -197,7 +218,19 @@ export default function ReaderScreen() {
           contentContainerClassName="flex-grow justify-center gap-5 px-6 py-6">
           {pageSentences.map((item) => (
             <View key={item.id} className="gap-1.5">
-              <Text style={{ fontSize, lineHeight: fontSize * 1.65, color: readerColors.text }}>
+              <Text
+                accessibilityRole="button"
+                accessibilityLabel="Show this sentence's English translation"
+                onPress={() => {
+                  setSelectedSentenceId(item.id);
+                  setTranslationVisible(true);
+                }}
+                style={{
+                  backgroundColor: translationVisible && item.id === selectedSentence?.id ? '#C99A4526' : 'transparent',
+                  color: readerColors.text,
+                  fontSize,
+                  lineHeight: fontSize * 1.65,
+                }}>
                 {item.tokens.map((token, index) => (
                   <TokenText
                     key={token.id}
@@ -207,11 +240,14 @@ export default function ReaderScreen() {
                     showPronunciation={showPronunciation}
                     highlightGrammar={highlightGrammar}
                     showDifficult={showDifficult}
-                    onPress={() => openToken(token)}
+                    onPress={() => {
+                      setSelectedSentenceId(item.id);
+                      setTranslationVisible(true);
+                      openToken(token);
+                    }}
                   />
                 ))}
               </Text>
-              {translationVisible && <ThemedText type="small" style={{ color: readerColors.muted }}>{item.translation}</ThemedText>}
             </View>
           ))}
         </ScrollView>
@@ -225,11 +261,9 @@ export default function ReaderScreen() {
             <AppIcon icon={ChevronLeft} color={theme.primary} size={18} />
             <ThemedText type="smallBold" style={{ color: theme.primary }}>Back</ThemedText>
           </Pressable>
-          <Pressable accessibilityLabel="Back five seconds" onPress={() => narration.seekToMs(narration.positionMs - 5_000)} className="min-h-11 min-w-11 items-center justify-center"><AppIcon icon={Rewind} color={readerColors.text} size={20} /></Pressable>
           <Pressable accessibilityLabel={narration.playing ? 'Pause' : 'Play'} onPress={narration.playing ? narration.pause : narration.play} className="h-14 w-14 items-center justify-center rounded-chip" style={{ backgroundColor: theme.primary }}>
             <AppIcon icon={narration.playing ? Pause : Play} color={theme.onPrimary} size={24} />
           </Pressable>
-          <Pressable accessibilityLabel="Forward five seconds" onPress={() => narration.seekToMs(narration.positionMs + 5_000)} className="min-h-11 min-w-11 items-center justify-center"><AppIcon icon={FastForward} color={readerColors.text} size={20} /></Pressable>
           <Pressable
             accessibilityLabel={isLastPage ? 'Finish chapter' : 'Next page'}
             onPress={goNext}

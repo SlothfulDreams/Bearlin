@@ -83,7 +83,7 @@ const initialData = {
   profile: { displayName: 'Aaron Mann', level: 'A1' as CefrLevel, dailyGoalMinutes: 10, interests: ['Everyday life', 'Travel'], premium: false },
   preferences: {
     appTheme: 'system' as const,
-    fontSize: 23,
+    fontSize: 19,
     readerTheme: 'paper' as const,
     translationVisible: false,
     showPronunciation: false,
