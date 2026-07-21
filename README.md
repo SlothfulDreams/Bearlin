@@ -1,56 +1,108 @@
-# Welcome to your Expo app 👋
+# Bearlin
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Bearlin is an Expo 57 German graded-reader prototype for English-speaking learners. The interface, explanations, and translations are English, while reading passages and target vocabulary remain German. It uses original Bearlin branding and original A1–C2 mock content.
 
-## Get started
+## Included prototype flows
 
-1. Install dependencies
+- Home dashboard with goal, streak, progress, recommendations, and recent words
+- Discover search and filters for CEFR level, format, topic, and access tier
+- Article, story, and course overviews with chapters, keywords, grammar, bookmarks, and mock downloads
+- Paginated German reader with token lookup, translations, grammar highlights, reading preferences, and synchronized timing metadata
+- Long-form reader narration and audiobook controls backed by `expo-audio`, with a timed fallback for mock tracks
+- German word pronunciation backed by `expo-speech` across dictionary, saved-word, and review surfaces
+- Contextual dictionary sheets with German gender, article, plural, forms, pronunciation, examples, and save actions
+- Saved-word library and `ts-fsrs` review sessions with swipe grading
+- Persisted profile, goals, settings, progress, saved words, downloads, and review schedules
+- Onboarding, Bearlin Plus preview, dark mode, responsive web/tablet layouts, and reduced motion
 
-   ```bash
-   npm install
-   ```
+Authentication, billing, production downloads, cloud sync, and external dictionary integrations are intentionally placeholders.
 
-2. Start the app
+## Requirements
 
-   ```bash
-   npx expo start
-   ```
+- [Bun](https://bun.sh/)
+- A supported Expo development environment for iOS or Android
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Install and run
 
 ```bash
-npm run reset-project
+bun install
+bun run start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Other targets:
 
-### Other setup steps
+```bash
+bun run ios
+bun run android
+bun run web
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Use Expo development builds when testing production background-audio behavior. On physical iOS devices, system text-to-speech is muted when the hardware silent switch is enabled.
 
-## Learn more
+## Validation
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+bun run check
+bunx expo-doctor
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Individual commands:
 
-## Join the community
+```bash
+bun run typecheck
+bun run lint
+bun run test
+```
 
-Join our community of developers creating universal apps.
+Regenerate the original raster brand marks after changing the palette or geometry:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+python3 scripts/generate-brand-assets.py
+```
+
+## Project layout
+
+```text
+src/
+  app/                       Expo Router routes
+  components/                Bearlin UI and dictionary components
+  constants/                 Runtime colors for native APIs
+  data/
+    content-repository.ts    Database-neutral content contract
+    learning-repository.ts   Database-neutral user-learning contract
+    mock/                    Original validated fixtures + mock repository
+    repositories.ts          Active repository composition root
+    schemas.ts               Zod entities and boundary validation
+  hooks/                     Query and audio adapters
+  lib/                       FSRS, haptics, and query client
+  store/                     Persisted local learning state
+```
+
+Application UI is styled with NativeWind utilities. See [`docs/nativewind.md`](docs/nativewind.md) for setup, dark-mode behavior, and the rule for choosing `className` versus runtime `style`.
+
+## Replacing mock data with a database
+
+Screens do not import fixture arrays. They use TanStack Query hooks, which call `ContentRepository` through `src/data/repositories.ts`.
+
+To connect a backend:
+
+1. Implement `ContentRepository` from `src/data/content-repository.ts` in a new adapter such as `src/data/api/api-content-repository.ts`.
+2. Validate API/database payloads with the schemas in `src/data/schemas.ts` at the adapter boundary.
+3. Replace the `MockContentRepository` construction in `src/data/repositories.ts` with the production implementation.
+4. Keep entity IDs stable so persisted progress, bookmarks, saved words, and deep links continue to resolve.
+5. Implement `LearningRepository` for authenticated/cloud state when cloud sync is introduced. Reconcile it with the local Zustand store rather than coupling screens directly to a database SDK.
+6. Store audio files and timing cues behind stable URLs. `useNarrationPlayer` already accepts real `AudioTrack.source` values.
+
+See [`docs/data-architecture.md`](docs/data-architecture.md) for field mapping and migration boundaries.
+
+## Product and research notes
+
+- [`docs/du-chinese-feature-matrix.md`](docs/du-chinese-feature-matrix.md)
+- [`docs/brand-guidelines.md`](docs/brand-guidelines.md)
+- [`docs/dependency-audit.md`](docs/dependency-audit.md)
+- [`docs/data-architecture.md`](docs/data-architecture.md)
+- [`docs/nativewind.md`](docs/nativewind.md)
+
+## Content and asset policy
+
+Do not copy Du Chinese trademarks, stories, recordings, illustrations, or interface assets. All production content and non-code assets must be original, public domain, or properly licensed, with attribution recorded when required.
