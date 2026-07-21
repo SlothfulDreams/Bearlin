@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
-export const cefrLevelSchema = z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
-export const contentTypeSchema = z.enum(['article', 'story', 'course']);
-export const accessTierSchema = z.enum(['free', 'premium']);
+const cefrLevelSchema = z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
+const contentTypeSchema = z.enum(['article', 'story', 'course']);
+const accessTierSchema = z.enum(['free', 'premium']);
 
-export const paletteSchema = z.object({
+const paletteSchema = z.object({
   background: z.string(),
   foreground: z.string(),
   accent: z.string(),
@@ -29,7 +29,7 @@ export const contentSummarySchema = z.object({
   featured: z.boolean().default(false),
 });
 
-export const chapterSummarySchema = z.object({
+const chapterSummarySchema = z.object({
   id: z.string(),
   contentId: z.string(),
   number: z.number().int().positive(),
@@ -65,7 +65,7 @@ export const grammarPointSchema = z.object({
   commonMistakes: z.array(z.string()).default([]),
 });
 
-export const tokenSchema = z.object({
+const tokenSchema = z.object({
   id: z.string(),
   surface: z.string(),
   dictionaryEntryId: z.string().optional(),
@@ -77,7 +77,7 @@ export const tokenSchema = z.object({
   punctuation: z.boolean().default(false),
 });
 
-export const sentenceSchema = z.object({
+const sentenceSchema = z.object({
   id: z.string(),
   order: z.number().int().nonnegative(),
   translation: z.string(),
@@ -86,7 +86,7 @@ export const sentenceSchema = z.object({
   audioEndMs: z.number().int().positive().optional(),
 });
 
-export const audioTrackSchema = z.object({
+const audioTrackSchema = z.object({
   id: z.string(),
   title: z.string(),
   speaker: z.string(),
@@ -134,63 +134,4 @@ export interface HomeFeed {
   recommended: ContentSummary[];
   newReleases: ContentSummary[];
   collections: ContentCollection[];
-}
-
-export interface ReadingProgress {
-  contentId: string;
-  chapterId: string;
-  sentenceIndex: number;
-  percent: number;
-  startedAt: string;
-  updatedAt: string;
-  completedAt: string | null;
-}
-
-export interface SavedWord {
-  id: string;
-  dictionaryEntryId: string;
-  sourceContentId: string;
-  sourceChapterId: string;
-  sourceSentenceId: string;
-  sourceSentence: string;
-  sourceTranslation: string;
-  savedAt: string;
-}
-
-export interface Download {
-  contentId: string;
-  status: 'idle' | 'downloading' | 'downloaded' | 'failed';
-  progress: number;
-  updatedAt: string;
-}
-
-export interface Bookmark { contentId: string; createdAt: string }
-export interface Flashcard {
-  id: string;
-  savedWordId: string;
-  due: string;
-  stability: number;
-  difficulty: number;
-  elapsedDays: number;
-  scheduledDays: number;
-  learningSteps: number;
-  reps: number;
-  lapses: number;
-  state: number;
-  lastReview: string | null;
-}
-export interface ReviewEvent {
-  id: string;
-  flashcardId: string;
-  grade: 'forgot' | 'almost' | 'got-it';
-  reviewedAt: string;
-  nextDue: string;
-}
-export interface UserProfile {
-  id: string;
-  displayName: string;
-  level: CefrLevel;
-  dailyGoalMinutes: number;
-  interests: string[];
-  premium: boolean;
 }

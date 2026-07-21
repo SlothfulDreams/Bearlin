@@ -21,7 +21,3 @@ export function createReviewCard(now = new Date()) {
 export function scheduleReview(card: Card, grade: ReviewGrade, now = new Date()) {
   return scheduler.next(card, now, gradeToRating[grade]);
 }
-
-export function getReviewPreviews(card: Card, now = new Date()) {
-  return scheduler.repeat(card, now);
-}

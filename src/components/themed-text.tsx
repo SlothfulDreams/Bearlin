@@ -4,7 +4,7 @@ import { Text, type TextProps } from 'react-native';
 import { textVariants } from '@/components/themed-text.variants';
 import type { ThemeColor } from '@/constants/theme';
 
-export type TextVariant =
+type TextVariant =
   | 'body'
   | 'bodyStrong'
   | 'display'

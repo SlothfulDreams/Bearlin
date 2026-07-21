@@ -13,7 +13,7 @@ interface ReviewRecord {
   lastGrade?: ReviewGrade;
 }
 
-export interface ReaderPreferencesState {
+interface ReaderPreferencesState {
   appTheme: 'system' | 'light' | 'dark';
   fontSize: number;
   readerTheme: 'paper' | 'sepia' | 'night';

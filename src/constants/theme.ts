@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 
 // E-ink / Kindle-inspired palette: warm paper, soft black ink, muted accents.
 // Keep in sync with tailwind.config.js.
-export const Brand = {
+const Brand = {
   red: '#A63D40',
   redDark: '#833134',
   gold: '#C99A45',

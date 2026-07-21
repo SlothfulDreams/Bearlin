@@ -1,12 +1,13 @@
-import { createReviewCard, getReviewPreviews, scheduleReview } from './fsrs';
+import { createReviewCard, scheduleReview } from './fsrs';
 
 describe('FSRS adapter', () => {
   const now = new Date('2026-07-20T12:00:00.000Z');
 
-  it('maps Bearlin grades onto increasing FSRS outcomes', () => {
+  it('maps stronger grades to later review dates', () => {
     const card = createReviewCard(now);
-    const previews = getReviewPreviews(card, now);
-    expect(previews[1].card.due.getTime()).toBeLessThanOrEqual(previews[3].card.due.getTime());
+    const forgot = scheduleReview(card, 'forgot', now);
+    const gotIt = scheduleReview(card, 'got-it', now);
+    expect(forgot.card.due.getTime()).toBeLessThanOrEqual(gotIt.card.due.getTime());
   });
 
   it('schedules and records a successful review', () => {

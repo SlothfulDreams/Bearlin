@@ -6,7 +6,7 @@ Route components consume query hooks and learning-store actions. They do not imp
 
 ```text
 Screen → TanStack Query hook → ContentRepository → active adapter
-Screen → Zustand action      → local persistence / future LearningRepository
+Screen → Zustand action      → local persistence / future sync adapter
 ```
 
 The composition root is `src/data/repositories.ts`.
@@ -39,7 +39,7 @@ The local prototype persists:
 - FSRS card state and review count
 - daily reading minutes and streak
 
-The future cloud model should use the `LearningRepository` contract in `src/data/learning-repository.ts`. Persist timestamps as ISO 8601 UTC strings at boundaries. Convert FSRS `due` and `last_review` values to `Date` only inside the scheduling adapter.
+A future cloud model should introduce a repository contract when its backend requirements are known. Persist timestamps as ISO 8601 UTC strings at boundaries. Convert FSRS `due` and `last_review` values to `Date` only inside the scheduling adapter.
 
 ## Recommended backend mapping
 

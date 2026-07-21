@@ -10,7 +10,7 @@ import type {
   HomeFeed,
 } from '@/data/schemas';
 
-export type ContentSort = 'recommended' | 'newest' | 'shortest' | 'level';
+type ContentSort = 'recommended' | 'newest' | 'shortest' | 'level';
 
 export interface ContentFilters {
   query?: string;
@@ -38,10 +38,3 @@ export interface ContentRepository {
   getGrammarPoint(id: string): Promise<GrammarPoint | null>;
   getGrammarPoints(ids: string[]): Promise<GrammarPoint[]>;
 }
-
-/**
- * Screens consume this contract through query hooks. A future HTTP, Supabase,
- * SQLite, or other database implementation can replace the mock repository
- * without changing route components.
- */
-export type ContentRepositoryFactory = () => ContentRepository;

@@ -70,7 +70,7 @@ function buildChapter(
   return { ...data, audio: chapterAudio(data.id, data.title, data.sentences) };
 }
 
-export const mockDictionary: DictionaryEntry[] = [
+const mockDictionary: DictionaryEntry[] = [
   {
     id: 'word-schluessel', lemma: 'Schlüssel', article: 'der', gender: 'masculine', plural: 'Schlüssel',
     partOfSpeech: 'Noun', pronunciation: '/ˈʃlʏsl̩/', translations: ['key'],
@@ -159,7 +159,7 @@ export const mockDictionary: DictionaryEntry[] = [
   },
 ];
 
-export const mockGrammar: GrammarPoint[] = [
+const mockGrammar: GrammarPoint[] = [
   {
     id: 'grammar-accusative-possessive', title: 'Possessive articles in the accusative', level: 'A1',
     summary: 'Masculine nouns change mein/dein/ihr to meinen/deinen/ihren in the accusative.',
@@ -288,7 +288,7 @@ const chapterDefinitions: {
   },
 ];
 
-export const mockChapters: Chapter[] = chapterDefinitions.map(({ level: _level, ...chapter }) => buildChapter(chapter));
+const mockChapters: Chapter[] = chapterDefinitions.map(({ level: _level, ...chapter }) => buildChapter(chapter));
 
 function summaryForChapter(chapter: Chapter): ChapterSummary {
   const { id, contentId, number, title, summary, estimatedMinutes, access } = chapter;
@@ -306,7 +306,7 @@ const stockCovers = {
   journal: 'https://images.unsplash.com/photo-1753756510738-33a176dd3b0a?auto=format&fit=crop&w=1600&q=80',
 } as const;
 
-export const mockContent: ContentSummary[] = [
+const mockContent: ContentSummary[] = [
   { id: 'missing-key', slug: 'der-verschwundene-schluessel', type: 'story', title: 'The Missing Key', subtitle: 'A small search in a big house', description: 'Mila searches for her key and follows a surprising trail.', level: 'A1', topic: 'Everyday life', tags: ['Family', 'Home', 'Birthday'], coverImage: stockCovers.keys, palette: { background: '#EAD8D2', foreground: '#74392F', accent: '#A63D40' }, chapterCount: 3, estimatedMinutes: 9, publishedAt: '2026-07-12', access: 'free', featured: true },
   { id: 'sunday-lake', slug: 'ein-sonntag-am-see', type: 'article', title: 'A Sunday at the Lake', description: 'A short train trip with a picnic and a summer shower.', level: 'A2', topic: 'Travel', tags: ['Nature', 'Berlin', 'Weekend'], coverImage: stockCovers.lakeTrain, palette: { background: '#DFE7DA', foreground: '#3C5A40', accent: '#4F7A5B' }, chapterCount: 1, estimatedMinutes: 5, publishedAt: '2026-07-15', access: 'free', featured: true },
   { id: 'polite-course', slug: 'hoeflich-fragen', type: 'course', title: 'Asking Politely', subtitle: 'Everyday German', description: 'Practical phrases for the station, café, and neighborhood.', level: 'B1', topic: 'Language', tags: ['Dialogue', 'Politeness', 'Everyday life'], coverImage: stockCovers.berlinCafe, palette: { background: '#EFE5C8', foreground: '#6A551F', accent: '#C99A45' }, chapterCount: 1, estimatedMinutes: 6, publishedAt: '2026-07-10', access: 'free', featured: true },
@@ -315,7 +315,7 @@ export const mockContent: ContentSummary[] = [
   { id: 'memory-invention', slug: 'zwischen-erinnerung-und-erfindung', type: 'article', title: 'Between Memory and Invention', description: 'An essay about memory as a story that changes over time.', level: 'C2', topic: 'Culture', tags: ['Essay', 'Memory', 'Philosophy'], coverImage: stockCovers.journal, palette: { background: '#E5E0D4', foreground: '#4C443A', accent: '#9B7E5B' }, chapterCount: 1, estimatedMinutes: 12, publishedAt: '2026-07-03', access: 'premium', featured: false },
 ];
 
-export const mockDetails: ContentDetail[] = mockContent.map((content) => {
+const mockDetails: ContentDetail[] = mockContent.map((content) => {
   const chapters = mockChapters.filter((chapter) => chapter.contentId === content.id);
   return {
     ...content,

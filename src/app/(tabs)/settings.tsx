@@ -2,7 +2,7 @@ import ExpoSlider from '@expo/ui/community/slider';
 import { clsx } from 'clsx';
 import { Image } from 'expo-image';
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
-import { Children } from 'react';
+import { Children, isValidElement } from 'react';
 import { Alert, Pressable, Switch, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -234,7 +234,7 @@ function SettingsSection({
         <View className="rounded-card border border-line bg-surface px-4 py-1 dark:border-line-dark dark:bg-surface-dark">
           {rows.map((row, index) => (
             <View
-              key={index}
+              key={isValidElement(row) ? row.key : String(row)}
               className={clsx('min-h-12 justify-center py-2', index > 0 && 'border-t border-line dark:border-line-dark')}>
               {row}
             </View>
