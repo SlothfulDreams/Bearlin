@@ -1,6 +1,6 @@
 import { clsx } from 'clsx';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, Switch, Text, View, useWindowDimensions } from 'react-native';
+import { FlatList, Modal, Pressable, Switch, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Check from 'lucide-react-native/icons/check';
 import ChevronLeft from 'lucide-react-native/icons/chevron-left';
@@ -211,46 +211,47 @@ export default function ReaderScreen() {
           </Pressable>
         )}
 
-        <ScrollView
+        <FlatList
           key={`${chapterId}-${page}`}
           className="flex-1"
+          data={pageSentences}
+          keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
-          contentContainerClassName="flex-grow justify-center gap-5 px-6 py-6">
-          {pageSentences.map((item) => (
-            <View key={item.id} className="gap-1.5">
-              <Text
-                accessibilityRole="button"
-                accessibilityLabel="Show this sentence's English translation"
-                onPress={() => {
-                  setSelectedSentenceId(item.id);
-                  setTranslationVisible(true);
-                }}
-                style={{
-                  backgroundColor: translationVisible && item.id === selectedSentence?.id ? '#C99A4526' : 'transparent',
-                  color: readerColors.text,
-                  fontSize,
-                  lineHeight: fontSize * 1.65,
-                }}>
-                {item.tokens.map((token, index) => (
-                  <TokenText
-                    key={token.id}
-                    token={token}
-                    previous={item.tokens[index - 1]}
-                    active={token.id === activeTokenId}
-                    showPronunciation={showPronunciation}
-                    highlightGrammar={highlightGrammar}
-                    showDifficult={showDifficult}
-                    onPress={() => {
-                      setSelectedSentenceId(item.id);
-                      setTranslationVisible(true);
-                      openToken(token);
-                    }}
-                  />
-                ))}
-              </Text>
-            </View>
-          ))}
-        </ScrollView>
+          contentContainerClassName="flex-grow justify-center px-6 py-6"
+          ItemSeparatorComponent={() => <View className="h-5" />}
+          renderItem={({ item }) => (
+            <Text
+              accessibilityRole="button"
+              accessibilityLabel="Show this sentence's English translation"
+              onPress={() => {
+                setSelectedSentenceId(item.id);
+                setTranslationVisible(true);
+              }}
+              style={{
+                backgroundColor: translationVisible && item.id === selectedSentence?.id ? '#C99A4526' : 'transparent',
+                color: readerColors.text,
+                fontSize,
+                lineHeight: fontSize * 1.65,
+              }}>
+              {item.tokens.map((token, index) => (
+                <TokenText
+                  key={token.id}
+                  token={token}
+                  previous={item.tokens[index - 1]}
+                  active={token.id === activeTokenId}
+                  showPronunciation={showPronunciation}
+                  highlightGrammar={highlightGrammar}
+                  showDifficult={showDifficult}
+                  onPress={() => {
+                    setSelectedSentenceId(item.id);
+                    setTranslationVisible(true);
+                    openToken(token);
+                  }}
+                />
+              ))}
+            </Text>
+          )}
+        />
 
         <View className="min-h-[76px] flex-row items-center justify-between border-t px-3" style={{ borderTopColor: theme.border }}>
           <Pressable
