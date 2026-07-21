@@ -111,12 +111,9 @@ export default function DiscoverScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <View className="flex-1 px-2"><ContentCard content={item} compact /></View>}
           contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingTop: 16,
-            paddingBottom: getBottomContentPadding(insets.bottom),
-          }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}
           ItemSeparatorComponent={() => <View className="h-4" />}
+          ListFooterComponent={<View style={{ height: getBottomContentPadding(insets.bottom) }} />}
         />
       )}
     </SafeAreaView>

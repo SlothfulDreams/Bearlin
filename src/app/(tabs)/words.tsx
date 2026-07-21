@@ -80,12 +80,9 @@ export default function WordsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <WordRow entry={item} due={(reviews[item.id]?.card.due.getTime() ?? 0) <= now} reps={reviews[item.id]?.card.reps ?? 0} onRemove={() => toggleSaved(item.id)} />}
           ItemSeparatorComponent={() => <View className="h-2" />}
+          ListFooterComponent={<View style={{ height: getBottomContentPadding(insets.bottom) }} />}
           contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingTop: 16,
-            paddingBottom: getBottomContentPadding(insets.bottom),
-          }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}
         />
       )}
     </SafeAreaView>

@@ -74,7 +74,7 @@ export default function SettingsScreen() {
 
       {/* Learning: level + daily goal live together — both describe how you study. */}
       <SettingsSection title="Learning">
-        <View>
+        <View key="level">
           <SettingsRow label="Your level" />
           <View className="flex-row flex-wrap gap-2 pb-2">
             {CEFR_LEVELS.map((level) => {
@@ -98,7 +98,7 @@ export default function SettingsScreen() {
             })}
           </View>
         </View>
-        <View>
+        <View key="daily-goal">
           <SettingsRow label="Minutes per day" detail={`${profile.dailyGoalMinutes} min`} />
           <ExpoSlider
             value={profile.dailyGoalMinutes}
@@ -120,7 +120,7 @@ export default function SettingsScreen() {
 
       {/* Reading: everything that shapes the reader experience in one card. */}
       <SettingsSection title="Reading">
-        <View>
+        <View key="font-size">
           <SettingsRow label="Reader font size" detail={`${preferences.fontSize} pt`} />
           <ExpoSlider
             value={preferences.fontSize}
@@ -139,26 +139,30 @@ export default function SettingsScreen() {
           </View>
         </View>
         <SettingSwitch
+          key="translations"
           label="Always show translations"
           value={preferences.translationVisible}
           onValueChange={(translationVisible) => updatePreferences({ translationVisible })}
         />
         <SettingSwitch
+          key="grammar"
           label="Highlight grammar"
           value={preferences.highlightGrammar}
           onValueChange={(highlightGrammar) => updatePreferences({ highlightGrammar })}
         />
         <SettingSwitch
+          key="difficult-words"
           label="Highlight difficult words"
           value={preferences.showDifficult}
           onValueChange={(showDifficult) => updatePreferences({ showDifficult })}
         />
         <SettingSwitch
+          key="pronunciation"
           label="Show pronunciation hints"
           value={preferences.showPronunciation}
           onValueChange={(showPronunciation) => updatePreferences({ showPronunciation })}
         />
-        <View>
+        <View key="listening-speed">
           <SettingsRow label="Listening speed" />
           <View className="flex-row gap-2 pb-2">
             {PLAYBACK_RATES.map((rate) => (
@@ -175,7 +179,7 @@ export default function SettingsScreen() {
 
       {/* App: app-wide concerns — theme plus support links. */}
       <SettingsSection title="App">
-        <View>
+        <View key="theme">
           <SettingsRow label="Theme" />
           <View className="flex-row gap-2 pb-2">
             {(['system', 'light', 'dark'] as const).map((mode) => (
@@ -189,11 +193,13 @@ export default function SettingsScreen() {
           </View>
         </View>
         <SettingsRow
+          key="privacy"
           label="Privacy"
           accessory={<AppIcon icon={ChevronRight} size={18} themeColor="textSecondary" />}
           onPress={() => {}}
         />
         <SettingsRow
+          key="help"
           label="Help & Feedback"
           accessory={<AppIcon icon={ChevronRight} size={18} themeColor="textSecondary" />}
           onPress={() => {}}
@@ -221,28 +227,30 @@ export default function SettingsScreen() {
 function SettingsSection({
   title,
   children,
-  contained = true,
   className,
-}: React.PropsWithChildren<{ title: string; contained?: boolean; className?: string }>) {
-  const rows = Children.toArray(children);
+}: React.PropsWithChildren<{ title: string; className?: string }>) {
+  const rows: { child: React.ReactElement; key: React.Key }[] = [];
+  Children.forEach(children, (child) => {
+    if (!isValidElement(child) || child.key == null) {
+      throw new Error(`SettingsSection "${title}" children require explicit keys.`);
+    }
+    rows.push({ child, key: child.key });
+  });
+
   return (
     <View className={clsx('mt-6 gap-2', className)}>
       <ThemedText className="px-1" type="label" themeColor="textSecondary">
         {title.toLocaleUpperCase('en-US')}
       </ThemedText>
-      {contained ? (
-        <View className="rounded-card border border-line bg-surface px-4 py-1 dark:border-line-dark dark:bg-surface-dark">
-          {rows.map((row, index) => (
-            <View
-              key={isValidElement(row) ? row.key : String(row)}
-              className={clsx('min-h-12 justify-center py-2', index > 0 && 'border-t border-line dark:border-line-dark')}>
-              {row}
-            </View>
-          ))}
-        </View>
-      ) : (
-        <View>{children}</View>
-      )}
+      <View className="rounded-card border border-line bg-surface px-4 py-1 dark:border-line-dark dark:bg-surface-dark">
+        {rows.map((row, index) => (
+          <View
+            key={row.key}
+            className={clsx('min-h-12 justify-center py-2', index > 0 && 'border-t border-line dark:border-line-dark')}>
+            {row.child}
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
