@@ -18,7 +18,8 @@ The composition root is `src/data/repositories.ts`.
 | `ContentSummary` | Search/catalog projection for an article, story, or course |
 | `ContentDetail` | Overview data plus chapter/resource references |
 | `Chapter` | Ordered sentences, keyword IDs, grammar IDs, names, and audio metadata |
-| `Sentence` | Translation and ordered token/timing data |
+| `Sentence` | Translation, ordered token/timing data, and explicitly authored lexical units |
+| `LexicalUnit` | A word or phrase with contextual lookup data and one or more token references |
 | `Token` | Display surface plus dictionary/grammar references and audio cue boundaries |
 | `DictionaryEntry` | German lemma, morphology, pronunciation, meanings, forms, examples, and tags |
 | `GrammarPoint` | CEFR-aligned explanation, pattern, examples, and mistakes |
@@ -26,6 +27,8 @@ The composition root is `src/data/repositories.ts`.
 | `ContentCollection` | Curated ordered list of catalog IDs |
 
 All network/database adapters should validate their returned projections with Zod schemas from `src/data/schemas.ts`.
+
+Lexical grouping is authored with the content rather than inferred at runtime. This is required for German constructions whose surface form is ambiguous: reflexive pronouns, separable prefixes, and multiword verbs may be contiguous or split by other sentence elements. Every non-punctuation token belongs to exactly one lexical unit, and a unit may reference non-contiguous token IDs.
 
 ## Learning entities
 

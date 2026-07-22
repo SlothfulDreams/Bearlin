@@ -77,13 +77,78 @@ const tokenSchema = z.object({
   punctuation: z.boolean().default(false),
 });
 
-const sentenceSchema = z.object({
+const lexicalUnitSchema = z.object({
+  id: z.string(),
+  tokenIds: z.array(z.string()).min(1),
+  lemma: z.string(),
+  contextualTranslation: z.string(),
+  partOfSpeech: z.string(),
+  pronunciation: z.string(),
+  unitType: z.enum(['word', 'phrase', 'separable-verb', 'reflexive-verb', 'separable-reflexive-verb', 'proper-noun']),
+  dictionaryEntryId: z.string().optional(),
+  grammarPointIds: z.array(z.string()).default([]),
+});
+
+export const sentenceSchema = z.object({
   id: z.string(),
   order: z.number().int().nonnegative(),
   translation: z.string(),
   tokens: z.array(tokenSchema),
+  lexicalUnits: z.array(lexicalUnitSchema),
   audioStartMs: z.number().int().nonnegative().optional(),
   audioEndMs: z.number().int().positive().optional(),
+}).superRefine((sentence, context) => {
+  const tokensById = new Map(sentence.tokens.map((token) => [token.id, token]));
+  const assignedTokenIds = new Set<string>();
+  const lexicalUnitIds = new Set<string>();
+
+  sentence.lexicalUnits.forEach((unit, unitIndex) => {
+    if (lexicalUnitIds.has(unit.id)) {
+      context.addIssue({
+        code: 'custom',
+        message: `Duplicate lexical unit ID: ${unit.id}`,
+        path: ['lexicalUnits', unitIndex, 'id'],
+      });
+    }
+    lexicalUnitIds.add(unit.id);
+
+    unit.tokenIds.forEach((tokenId, tokenIndex) => {
+      const token = tokensById.get(tokenId);
+      if (!token) {
+        context.addIssue({
+          code: 'custom',
+          message: `Lexical unit references unknown token: ${tokenId}`,
+          path: ['lexicalUnits', unitIndex, 'tokenIds', tokenIndex],
+        });
+        return;
+      }
+      if (token.punctuation) {
+        context.addIssue({
+          code: 'custom',
+          message: `Punctuation token cannot belong to a lexical unit: ${tokenId}`,
+          path: ['lexicalUnits', unitIndex, 'tokenIds', tokenIndex],
+        });
+      }
+      if (assignedTokenIds.has(tokenId)) {
+        context.addIssue({
+          code: 'custom',
+          message: `Token belongs to more than one lexical unit: ${tokenId}`,
+          path: ['lexicalUnits', unitIndex, 'tokenIds', tokenIndex],
+        });
+      }
+      assignedTokenIds.add(tokenId);
+    });
+  });
+
+  sentence.tokens.forEach((token, tokenIndex) => {
+    if (!token.punctuation && !assignedTokenIds.has(token.id)) {
+      context.addIssue({
+        code: 'custom',
+        message: `Token is missing a lexical unit: ${token.id}`,
+        path: ['tokens', tokenIndex, 'id'],
+      });
+    }
+  });
 });
 
 const audioTrackSchema = z.object({
@@ -124,6 +189,7 @@ export type ChapterSummary = z.infer<typeof chapterSummarySchema>;
 export type DictionaryEntry = z.infer<typeof dictionaryEntrySchema>;
 export type GrammarPoint = z.infer<typeof grammarPointSchema>;
 export type Token = z.infer<typeof tokenSchema>;
+export type LexicalUnit = z.infer<typeof lexicalUnitSchema>;
 export type Sentence = z.infer<typeof sentenceSchema>;
 export type AudioTrack = z.infer<typeof audioTrackSchema>;
 export type Chapter = z.infer<typeof chapterSchema>;

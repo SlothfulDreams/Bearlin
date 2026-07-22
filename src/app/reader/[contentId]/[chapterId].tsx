@@ -15,13 +15,17 @@ import { ThemedText } from '@/components/themed-text';
 import { ActionButton } from '@/components/ui/action-button';
 import { AppIcon } from '@/components/ui/app-icon';
 import { ProgressBar } from '@/components/ui/progress-bar';
+import { PronunciationButton } from '@/components/ui/pronunciation-button';
 import { ReaderContentWidth } from '@/constants/theme';
-import type { Token } from '@/data/schemas';
+import type { LexicalUnit, Sentence, Token } from '@/data/schemas';
 import { useChapter, useContentDetail } from '@/hooks/use-content';
 import { useNarrationPlayer } from '@/hooks/use-narration-player';
 import { useTheme } from '@/hooks/use-theme';
 import { paginateReaderItems, SENTENCES_PER_READER_PAGE } from '@/lib/reader-pagination';
 import { useLearningStore } from '@/store/learning-store';
+
+const READER_HIGHLIGHT = '#C99A4552';
+const LEXICAL_UNIT_HIGHLIGHT = '#4F9A7B99';
 
 export default function ReaderScreen() {
   const { contentId = '', chapterId = '' } = useLocalSearchParams<{ contentId: string; chapterId: string }>();
@@ -45,6 +49,7 @@ export default function ReaderScreen() {
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [chapterComplete, setChapterComplete] = useState(false);
   const [selectedSentenceId, setSelectedSentenceId] = useState<string>();
+  const [selectedLexicalUnitId, setSelectedLexicalUnitId] = useState<string>();
   const [selectedEntryId, setSelectedEntryId] = useState<string>();
   const narration = useNarrationPlayer(chapter.data?.audio, undefined, 0, preferences.playbackRate);
 
@@ -80,6 +85,20 @@ export default function ReaderScreen() {
     token.audioStartMs !== undefined && token.audioEndMs !== undefined && narration.positionMs >= token.audioStartMs && narration.positionMs < token.audioEndMs
   ))?.id;
   const selectedSentence = pageSentences.find((item) => item.id === selectedSentenceId) ?? pageSentences[0];
+  const selectedLexicalUnit = pageSentences
+    .flatMap((sentence) => sentence.lexicalUnits)
+    .find((unit) => unit.id === selectedLexicalUnitId);
+  const selectedLexicalUnitSentence = selectedLexicalUnit
+    ? pageSentences.find((sentence) => sentence.lexicalUnits.some((unit) => unit.id === selectedLexicalUnit.id))
+    : undefined;
+  const selectedLexicalSurface = selectedLexicalUnit && selectedLexicalUnitSentence
+    ? getLexicalUnitSurface(selectedLexicalUnitSentence, selectedLexicalUnit)
+    : undefined;
+  const lexicalUnitByTokenId = new Map<string, LexicalUnit>(
+    pageSentences.flatMap((sentence) => sentence.lexicalUnits.flatMap((unit) => (
+      unit.tokenIds.map((tokenId) => [tokenId, unit] as const)
+    ))),
+  );
 
   if (chapter.isPending || detail.isPending) {
     return <ReaderState background={readerColors.background} text="Preparing chapter…" />;
@@ -101,6 +120,7 @@ export default function ReaderScreen() {
     if (nextPage < 0 || nextPage >= readerPages.length) return;
     setPage(nextPage);
     setSelectedSentenceId(readerPages[nextPage][0]?.id);
+    setSelectedLexicalUnitId(undefined);
     narration.seekToMs(readerPages[nextPage][0]?.audioStartMs ?? 0);
   };
 
@@ -110,6 +130,7 @@ export default function ReaderScreen() {
     } else if (previousChapter) {
       narration.pause();
       setPage(0);
+      setSelectedLexicalUnitId(undefined);
       router.replace({ pathname: '/reader/[contentId]/[chapterId]', params: { contentId, chapterId: previousChapter.id } });
     }
   };
@@ -128,6 +149,7 @@ export default function ReaderScreen() {
     if (!nextChapter) return;
     setPage(0);
     setChapterComplete(false);
+    setSelectedLexicalUnitId(undefined);
     router.replace({
       pathname: '/reader/[contentId]/[chapterId]',
       params: { contentId, chapterId: nextChapter.id },
@@ -139,13 +161,11 @@ export default function ReaderScreen() {
     router.dismissTo({ pathname: '/content/[id]', params: { id: contentId } });
   };
 
-  const openToken = (token: Token) => {
+  const selectLexicalUnit = (sentenceId: string, unit: LexicalUnit) => {
     narration.pause();
-    if (token.dictionaryEntryId) {
-      setSelectedEntryId(token.dictionaryEntryId);
-    } else if (token.grammarPointIds[0]) {
-      router.push({ pathname: '/grammar/[id]', params: { id: token.grammarPointIds[0] } });
-    }
+    setSelectedSentenceId(sentenceId);
+    setSelectedLexicalUnitId(unit.id);
+    setTranslationVisible(true);
   };
 
   if (chapterComplete) {
@@ -180,36 +200,19 @@ export default function ReaderScreen() {
         </View>
         <View className="px-4 pb-2"><ProgressBar value={progress} /></View>
 
-        {translationVisible && selectedSentence ? (
-          <Pressable
-            accessibilityRole="switch"
-            accessibilityState={{ checked: true }}
-            accessibilityLabel={`English translation: ${selectedSentence.translation}`}
-            accessibilityHint="Double tap to hide the translation"
-            onPress={() => setTranslationVisible(false)}
-            className="min-h-[88px] justify-center border-b px-6 py-4"
-            style={{ borderBottomColor: theme.border }}>
-            <ThemedText
-              style={{
-                color: readerColors.text,
-                fontSize: Math.max(18, fontSize - 2),
-                lineHeight: Math.max(28, fontSize * 1.35),
-              }}>
-              {selectedSentence.translation}
-            </ThemedText>
-          </Pressable>
-        ) : (
-          <Pressable
-            accessibilityRole="switch"
-            accessibilityState={{ checked: false }}
-            accessibilityLabel="Show English translation"
-            onPress={() => setTranslationVisible(true)}
-            className="min-h-12 flex-row items-center justify-between border-b px-6"
-            style={{ borderBottomColor: theme.border }}>
-            <ThemedText type="small" style={{ color: readerColors.muted }}>Tap a sentence to translate</ThemedText>
-            <ThemedText type="smallBold" style={{ color: theme.primary }}>Show English</ThemedText>
-          </Pressable>
-        )}
+        <ReaderTopPanel
+          visible={translationVisible}
+          sentence={selectedSentence}
+          lexicalUnit={selectedLexicalUnit}
+          lexicalSurface={selectedLexicalSurface}
+          fontSize={fontSize}
+          textColor={readerColors.text}
+          mutedColor={readerColors.muted}
+          onShow={() => setTranslationVisible(true)}
+          onHide={() => setTranslationVisible(false)}
+          onOpenDictionary={setSelectedEntryId}
+          onOpenGrammar={(grammarPointId) => router.push({ pathname: '/grammar/[id]', params: { id: grammarPointId } })}
+        />
 
         <FlatList
           key={`${chapterId}-${page}`}
@@ -221,34 +224,35 @@ export default function ReaderScreen() {
           ItemSeparatorComponent={() => <View className="h-5" />}
           renderItem={({ item }) => (
             <Text
-              accessibilityRole="button"
-              accessibilityLabel="Show this sentence's English translation"
               onPress={() => {
                 setSelectedSentenceId(item.id);
+                setSelectedLexicalUnitId(undefined);
                 setTranslationVisible(true);
               }}
               style={{
-                backgroundColor: translationVisible && item.id === selectedSentence?.id ? '#C99A4526' : 'transparent',
                 color: readerColors.text,
                 fontSize,
                 lineHeight: fontSize * 1.65,
               }}>
-              {item.tokens.map((token, index) => (
-                <TokenText
-                  key={token.id}
-                  token={token}
-                  previous={item.tokens[index - 1]}
-                  active={token.id === activeTokenId}
-                  showPronunciation={showPronunciation}
-                  highlightGrammar={highlightGrammar}
-                  showDifficult={showDifficult}
-                  onPress={() => {
-                    setSelectedSentenceId(item.id);
-                    setTranslationVisible(true);
-                    openToken(token);
-                  }}
-                />
-              ))}
+              {item.tokens.map((token, index) => {
+                const lexicalUnit = lexicalUnitByTokenId.get(token.id);
+                return (
+                  <TokenText
+                    key={token.id}
+                    token={token}
+                    previous={item.tokens[index - 1]}
+                    active={token.id === activeTokenId}
+                    selected={item.id === selectedSentenceId}
+                    selectedUnit={lexicalUnit?.id === selectedLexicalUnitId}
+                    grouped={Boolean(lexicalUnit && lexicalUnit.tokenIds.length > 1)}
+                    accessibilityLabel={lexicalUnit ? `${getLexicalUnitSurface(item, lexicalUnit)}, ${lexicalUnit.contextualTranslation}, ${lexicalUnit.partOfSpeech}` : undefined}
+                    showPronunciation={showPronunciation}
+                    highlightGrammar={highlightGrammar}
+                    showDifficult={showDifficult}
+                    onPress={lexicalUnit ? () => selectLexicalUnit(item.id, lexicalUnit) : undefined}
+                  />
+                );
+              })}
             </Text>
           )}
         />
@@ -302,6 +306,103 @@ export default function ReaderScreen() {
       />
     </SafeAreaView>
   );
+}
+
+function ReaderTopPanel({
+  visible,
+  sentence,
+  lexicalUnit,
+  lexicalSurface,
+  fontSize,
+  textColor,
+  mutedColor,
+  onShow,
+  onHide,
+  onOpenDictionary,
+  onOpenGrammar,
+}: {
+  visible: boolean;
+  sentence?: Sentence;
+  lexicalUnit?: LexicalUnit;
+  lexicalSurface?: string;
+  fontSize: number;
+  textColor: string;
+  mutedColor: string;
+  onShow: () => void;
+  onHide: () => void;
+  onOpenDictionary: (entryId: string) => void;
+  onOpenGrammar: (grammarPointId: string) => void;
+}) {
+  const theme = useTheme();
+  const dictionaryEntryId = lexicalUnit?.dictionaryEntryId;
+
+  if (!visible || !sentence) {
+    return (
+      <Pressable
+        accessibilityRole="switch"
+        accessibilityState={{ checked: false }}
+        accessibilityLabel="Show English translation"
+        onPress={onShow}
+        className="min-h-12 flex-row items-center justify-between border-b px-6"
+        style={{ borderBottomColor: theme.border }}>
+        <ThemedText type="small" style={{ color: mutedColor }}>Tap a sentence to translate</ThemedText>
+        <ThemedText type="smallBold" style={{ color: theme.primary }}>Show English</ThemedText>
+      </Pressable>
+    );
+  }
+
+  return (
+    <View className="min-h-[88px] justify-center border-b px-6 py-4" style={{ borderBottomColor: theme.border }}>
+      {lexicalUnit && lexicalSurface ? (
+        <View className="gap-3">
+          <View className="flex-row items-center gap-3">
+            <View className="flex-1 gap-1">
+              <ThemedText type="section" style={{ color: theme.primary }}>{lexicalSurface}</ThemedText>
+              {lexicalUnit.lemma.toLocaleLowerCase('de-DE') !== lexicalSurface.toLocaleLowerCase('de-DE') ? (
+                <ThemedText type="small" style={{ color: mutedColor }}>Lemma: {lexicalUnit.lemma}</ThemedText>
+              ) : null}
+              <ThemedText style={{ color: textColor }}>{lexicalUnit.contextualTranslation}</ThemedText>
+              <ThemedText type="caption" style={{ color: mutedColor }}>
+                {lexicalUnit.partOfSpeech}{lexicalUnit.pronunciation ? ` · ${lexicalUnit.pronunciation}` : ''}
+              </ThemedText>
+            </View>
+            <PronunciationButton text={lexicalSurface} compact />
+          </View>
+          <View className="flex-row flex-wrap gap-2">
+            {dictionaryEntryId ? (
+              <ReaderPanelAction label="Dictionary" onPress={() => onOpenDictionary(dictionaryEntryId)} />
+            ) : null}
+            {lexicalUnit.grammarPointIds[0] ? (
+              <ReaderPanelAction label="Grammar" onPress={() => onOpenGrammar(lexicalUnit.grammarPointIds[0])} />
+            ) : null}
+            <ReaderPanelAction label="Hide" onPress={onHide} />
+          </View>
+        </View>
+      ) : (
+        <View className="gap-2">
+          <ThemedText style={{ color: textColor, fontSize: Math.max(18, fontSize - 2), lineHeight: Math.max(28, fontSize * 1.35) }}>
+            {sentence.translation}
+          </ThemedText>
+          <View className="items-start"><ReaderPanelAction label="Hide" onPress={onHide} /></View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function getLexicalUnitSurface(sentence: Sentence, unit: LexicalUnit) {
+  const tokenIds = new Set(unit.tokenIds);
+  const parts: string[] = [];
+  let previousTokenIndex: number | undefined;
+
+  sentence.tokens.forEach((token, tokenIndex) => {
+    if (!tokenIds.has(token.id)) return;
+    if (previousTokenIndex !== undefined && tokenIndex > previousTokenIndex + 1) parts.push('…');
+    parts.push(token.surface);
+    previousTokenIndex = tokenIndex;
+  });
+
+  return parts.join(' ');
 }
 
 function ChapterCompletion({
@@ -374,24 +475,46 @@ function ChapterCompletion({
   );
 }
 
-function TokenText({ token, previous, active, showPronunciation, highlightGrammar, showDifficult, onPress }: {
-  token: Token; previous?: Token; active: boolean; showPronunciation: boolean; highlightGrammar: boolean; showDifficult: boolean; onPress: () => void;
+function ReaderPanelAction({ label, onPress }: { label: string; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      className="min-h-11 justify-center rounded-chip px-4 active:opacity-70"
+      style={{ backgroundColor: theme.backgroundElement }}>
+      <ThemedText type="smallBold" style={{ color: theme.primary }}>{label}</ThemedText>
+    </Pressable>
+  );
+}
+
+function TokenText({ token, previous, active, selected, selectedUnit, grouped, accessibilityLabel, showPronunciation, highlightGrammar, showDifficult, onPress }: {
+  token: Token; previous?: Token; active: boolean; selected: boolean; selectedUnit: boolean; grouped: boolean; accessibilityLabel?: string; showPronunciation: boolean; highlightGrammar: boolean; showDifficult: boolean; onPress?: () => void;
 }) {
   const theme = useTheme();
   const needsSpace = previous && !token.punctuation && !['„', '“', '—', '–'].includes(previous.surface);
   const grammar = highlightGrammar && token.grammarPointIds.length > 0;
   const difficult = showDifficult && Boolean(token.dictionaryEntryId);
-  const interactive = Boolean(token.dictionaryEntryId || token.grammarPointIds.length);
+  const interactive = !token.punctuation && Boolean(onPress);
 
   return (
     <Text
-      accessibilityHint={showPronunciation ? token.pronunciation : undefined}
-      onPress={interactive ? onPress : undefined}
+      accessibilityRole={interactive ? 'button' : undefined}
+      accessibilityLabel={interactive ? accessibilityLabel : undefined}
+      accessibilityHint={interactive
+        ? showPronunciation && token.pronunciation
+          ? `Pronunciation ${token.pronunciation}. Selects the complete lexical unit.`
+          : 'Selects the complete lexical unit.'
+        : undefined}
+      onPress={interactive ? (event) => {
+        event.stopPropagation();
+        onPress?.();
+      } : undefined}
       suppressHighlighting
       style={{
-        backgroundColor: active ? '#C99A4552' : 'transparent',
-        textDecorationLine: grammar || difficult ? 'underline' : 'none',
-        textDecorationColor: grammar ? theme.success : difficult ? theme.primary : 'transparent',
+        backgroundColor: selectedUnit ? LEXICAL_UNIT_HIGHLIGHT : active || selected ? READER_HIGHLIGHT : 'transparent',
+        textDecorationLine: grouped || grammar || difficult ? 'underline' : 'none',
+        textDecorationColor: grouped || grammar ? theme.success : difficult ? theme.primary : 'transparent',
       }}>
       {needsSpace ? ` ${token.surface}` : token.surface}
     </Text>
