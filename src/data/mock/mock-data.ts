@@ -29,12 +29,13 @@ function lexicalGroup(
   unitType: LexicalUnit['unitType'],
   grammarPointIds: string[] = [],
   dictionaryEntryId?: string,
+  partOfSpeech = 'Verb',
 ): LexicalUnitOverride {
   return {
     tokenIndexes,
     lemma,
     contextualTranslation,
-    partOfSpeech: 'Verb',
+    partOfSpeech,
     pronunciation: '',
     unitType,
     dictionaryEntryId,
