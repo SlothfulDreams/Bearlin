@@ -7,12 +7,40 @@ import type {
   ContentSummary,
   DictionaryEntry,
   GrammarPoint,
+  LexicalUnit,
   Sentence,
   Token,
 } from '@/data/schemas';
 import type { MockContentDataset } from '@/data/mock/mock-content-repository';
+import { getMockLexeme } from '@/data/mock/mock-lexicon';
 
 type WordSpec = string | [surface: string, dictionaryEntryId?: string, grammarPointIds?: string[]];
+type LexicalUnitMetadata = Omit<LexicalUnit, 'id' | 'tokenIds'>;
+type LexicalUnitOverride = LexicalUnitMetadata & { id?: string; tokenIndexes: number[] };
+interface SentenceLexicalOptions {
+  units?: LexicalUnitOverride[];
+  words?: Record<number, Partial<LexicalUnitMetadata>>;
+}
+
+function lexicalGroup(
+  tokenIndexes: number[],
+  lemma: string,
+  contextualTranslation: string,
+  unitType: LexicalUnit['unitType'],
+  grammarPointIds: string[] = [],
+  dictionaryEntryId?: string,
+): LexicalUnitOverride {
+  return {
+    tokenIndexes,
+    lemma,
+    contextualTranslation,
+    partOfSpeech: 'Verb',
+    pronunciation: '',
+    unitType,
+    dictionaryEntryId,
+    grammarPointIds,
+  };
+}
 
 function makeSentence(
   id: string,
@@ -20,6 +48,7 @@ function makeSentence(
   translation: string,
   words: WordSpec[],
   startMs: number,
+  lexicalOptions: SentenceLexicalOptions = {},
 ): Sentence {
   let cursor = startMs;
   const tokens: Token[] = words.map((word, index) => {
@@ -40,11 +69,44 @@ function makeSentence(
     return token;
   });
 
+  const groupedTokenIndexes = new Set(lexicalOptions.units?.flatMap((unit) => unit.tokenIndexes) ?? []);
+  const groupedUnits: LexicalUnit[] = (lexicalOptions.units ?? []).map(({ id: unitId, tokenIndexes, ...metadata }) => ({
+    id: unitId ?? `${id}-u${Math.min(...tokenIndexes) + 1}`,
+    tokenIds: tokenIndexes.map((tokenIndex) => {
+      const token = tokens[tokenIndex];
+      if (!token) throw new RangeError(`Lexical unit in ${id} references missing token index ${tokenIndex}.`);
+      return token.id;
+    }),
+    ...metadata,
+  }));
+  const singleWordUnits: LexicalUnit[] = tokens.flatMap((token, tokenIndex) => {
+    if (token.punctuation || groupedTokenIndexes.has(tokenIndex)) return [];
+    const authored = getMockLexeme(token.surface);
+    const metadata = lexicalOptions.words?.[tokenIndex];
+    return [{
+      id: `${id}-u${tokenIndex + 1}`,
+      tokenIds: [token.id],
+      lemma: metadata?.lemma ?? authored.lemma,
+      contextualTranslation: metadata?.contextualTranslation ?? authored.contextualTranslation,
+      partOfSpeech: metadata?.partOfSpeech ?? authored.partOfSpeech,
+      pronunciation: metadata?.pronunciation ?? token.pronunciation ?? authored.pronunciation,
+      unitType: metadata?.unitType ?? authored.unitType,
+      dictionaryEntryId: metadata?.dictionaryEntryId ?? token.dictionaryEntryId ?? authored.dictionaryEntryId,
+      grammarPointIds: metadata?.grammarPointIds ?? (token.grammarPointIds.length ? token.grammarPointIds : authored.grammarPointIds),
+    }];
+  });
+  const lexicalUnits = [...groupedUnits, ...singleWordUnits].sort((left, right) => {
+    const leftIndex = tokens.findIndex((token) => token.id === left.tokenIds[0]);
+    const rightIndex = tokens.findIndex((token) => token.id === right.tokenIds[0]);
+    return leftIndex - rightIndex;
+  });
+
   return {
     id,
     order,
     translation,
     tokens,
+    lexicalUnits,
     audioStartMs: startMs,
     audioEndMs: cursor,
   };
@@ -176,6 +238,22 @@ const mockGrammar: GrammarPoint[] = [
     commonMistakes: ['Choose the case from meaning, not from the preposition alone.'],
   },
   {
+    id: 'grammar-separable-verbs', title: 'Separable verbs', level: 'A2',
+    summary: 'In a main clause, a separable prefix moves to the end while remaining part of the same verb.',
+    explanation: ['The conjugated verb stem occupies the normal verb position.', 'The prefix appears at the end of the clause, even when other sentence elements stand between both parts.'],
+    pattern: 'Subjekt + Verbstamm + … + Präfix',
+    examples: [{ german: 'Wir steigen in die Straßenbahn ein.', translation: 'We board the tram.', note: 'steigen + ein belong to einsteigen' }],
+    commonMistakes: ['Look up the complete infinitive, not the separated stem or prefix by itself.'],
+  },
+  {
+    id: 'grammar-reflexive-verbs', title: 'Reflexive verbs', level: 'A2',
+    summary: 'A reflexive verb uses a pronoun that refers back to the subject.',
+    explanation: ['The reflexive pronoun changes with the subject: mich, dich, sich, uns, euch, sich.', 'Treat the verb and its required reflexive pronoun as one vocabulary unit.'],
+    pattern: 'Subjekt + Verb + Reflexivpronomen',
+    examples: [{ german: 'Die Tür schließt sich.', translation: 'The door closes.' }, { german: 'Sie kniet sich hin.', translation: 'She kneels down.', note: 'This verb is both reflexive and separable.' }],
+    commonMistakes: ['Do not omit the reflexive pronoun when it is required by the verb.'],
+  },
+  {
     id: 'grammar-polite-konjunktiv', title: 'Polite requests with Konjunktiv II', level: 'B1',
     summary: 'Könnten Sie …? makes requests courteous and indirect.',
     explanation: ['The finite verb comes first in a yes/no-style request.', 'Use the infinitive at the end with a modal verb.'],
@@ -212,17 +290,20 @@ const chapterDefinitions: {
 }[] = [
   {
     id: 'key-1', contentId: 'missing-key', number: 1, title: 'Wo ist der Schlüssel?', summary: 'Mila wants to leave the house.', estimatedMinutes: 3, access: 'free', level: 'A1',
-    grammarPointIds: ['grammar-accusative-possessive'], keywordIds: ['word-schluessel', 'word-suchen', 'word-tasche'],
+    grammarPointIds: ['grammar-accusative-possessive', 'grammar-reflexive-verbs', 'grammar-separable-verbs'], keywordIds: ['word-schluessel', 'word-suchen', 'word-tasche'],
     sentences: [
       makeSentence('key-1-s1', 0, 'Mila wants to go to the bakery, but she cannot find her key.', [['Mila'], ['möchte'], ['zur'], ['Bäckerei'], [','], ['aber'], ['sie'], ['findet'], ['ihren', undefined, ['grammar-accusative-possessive']], ['Schlüssel', 'word-schluessel'], ['nicht'], ['.']], 0),
       makeSentence('key-1-s2', 1, 'She looks in her bag and under the table.', [['Sie'], ['sucht', 'word-suchen'], ['in'], ['ihrer'], ['Tasche', 'word-tasche'], ['und'], ['unter'], ['dem'], ['Tisch'], ['.']], 5_000),
       makeSentence('key-1-s3', 2, 'Then she checks the pockets of her jacket.', [['Dann'], ['prüft'], ['sie'], ['die'], ['Taschen'], ['ihrer'], ['Jacke'], ['.']], 9_500),
       makeSentence('key-1-s4', 3, 'There is only an old bus ticket inside.', [['Darin'], ['liegt'], ['nur'], ['eine'], ['alte'], ['Fahrkarte'], ['.']], 13_500),
-      makeSentence('key-1-s5', 4, 'Mila goes back into the kitchen.', [['Mila'], ['geht'], ['zurück'], ['in'], ['die'], ['Küche'], ['.']], 17_000),
+      makeSentence('key-1-s5', 4, 'Mila goes back into the kitchen.', [['Mila'], ['geht'], ['zurück'], ['in'], ['die'], ['Küche'], ['.']], 17_000, { units: [lexicalGroup([1, 2], 'zurückgehen', 'goes back', 'separable-verb', ['grammar-separable-verbs'])] }),
       makeSentence('key-1-s6', 5, 'The coffee is still warm on the table.', [['Der'], ['Kaffee'], ['auf'], ['dem'], ['Tisch'], ['ist'], ['noch'], ['warm'], ['.']], 20_500),
       makeSentence('key-1-s7', 6, 'Next to it, she sees her empty key bowl.', [['Daneben'], ['sieht'], ['sie'], ['ihre'], ['leere'], ['Schlüsselschale'], ['.']], 24_500),
       makeSentence('key-1-s8', 7, 'Perhaps the key fell behind the cupboard.', [['Vielleicht'], ['ist'], ['der'], ['Schlüssel', 'word-schluessel'], ['hinter'], ['den'], ['Schrank'], ['gefallen'], ['.']], 28_500),
-      makeSentence('key-1-s9', 8, 'She kneels down and looks carefully.', [['Sie'], ['kniet'], ['sich'], ['hin'], ['und'], ['schaut'], ['genau'], ['nach'], ['.']], 32_500),
+      makeSentence('key-1-s9', 8, 'She kneels down and looks carefully.', [['Sie'], ['kniet'], ['sich'], ['hin'], ['und'], ['schaut'], ['genau'], ['nach'], ['.']], 32_500, { units: [
+        lexicalGroup([1, 2, 3], 'sich hinknien', 'kneels down', 'separable-reflexive-verb', ['grammar-reflexive-verbs', 'grammar-separable-verbs']),
+        lexicalGroup([5, 7], 'nachschauen', 'looks carefully', 'separable-verb', ['grammar-separable-verbs']),
+      ] }),
       makeSentence('key-1-s10', 9, 'But she finds only a little dust.', [['Aber'], ['sie'], ['findet'], ['nur'], ['ein'], ['wenig'], ['Staub'], ['.']], 36_500),
       makeSentence('key-1-s11', 10, 'Suddenly she hears a quiet noise at the apartment door.', [['Plötzlich'], ['hört'], ['sie'], ['ein'], ['leises'], ['Geräusch', 'word-geraeusch'], ['an'], ['der'], ['Wohnungstür'], ['.']], 40_500),
       makeSentence('key-1-s12', 11, 'Mila opens the door and looks into the hallway.', [['Mila'], ['öffnet'], ['die'], ['Tür'], ['und'], ['blickt'], ['in'], ['den'], ['Flur'], ['.']], 45_000),
@@ -232,10 +313,10 @@ const chapterDefinitions: {
   },
   {
     id: 'key-2', contentId: 'missing-key', number: 2, title: 'Eine Spur im Flur', summary: 'A note leads Mila to the door.', estimatedMinutes: 3, access: 'free', level: 'A1',
-    grammarPointIds: ['grammar-accusative-possessive'], keywordIds: ['word-briefkasten', 'word-verschwinden'],
+    grammarPointIds: ['grammar-accusative-possessive', 'grammar-separable-verbs'], keywordIds: ['word-briefkasten', 'word-verschwinden'],
     sentences: [
       makeSentence('key-2-s1', 0, 'The key has disappeared, but a red note lies in the hallway.', [['Der'], ['Schlüssel', 'word-schluessel'], ['ist'], ['verschwunden', 'word-verschwinden'], [','], ['aber'], ['im'], ['Flur'], ['liegt'], ['ein'], ['roter'], ['Zettel'], ['.']], 0),
-      makeSentence('key-2-s2', 1, 'On it is written: Look in the mailbox!', [['Darauf'], ['steht'], [':'], ['„'], ['Sieh'], ['im'], ['Briefkasten', 'word-briefkasten'], ['nach'], ['!'], ['“']], 5_400),
+      makeSentence('key-2-s2', 1, 'On it is written: Look in the mailbox!', [['Darauf'], ['steht'], [':'], ['„'], ['Sieh'], ['im'], ['Briefkasten', 'word-briefkasten'], ['nach'], ['!'], ['“']], 5_400, { units: [lexicalGroup([4, 7], 'nachsehen', 'look / check', 'separable-verb', ['grammar-separable-verbs'])] }),
     ], peopleAndPlaceNames: [{ name: 'Mila', note: 'the main character in the story' }],
   },
   {
@@ -248,10 +329,10 @@ const chapterDefinitions: {
   },
   {
     id: 'lake-1', contentId: 'sunday-lake', number: 1, title: 'Ein Sonntag am See', summary: 'A peaceful trip just outside the city.', estimatedMinutes: 5, access: 'free', level: 'A2',
-    grammarPointIds: ['grammar-wechselpraeposition'], keywordIds: ['word-see', 'word-ufer'],
+    grammarPointIds: ['grammar-wechselpraeposition', 'grammar-separable-verbs'], keywordIds: ['word-see', 'word-ufer'],
     sentences: [
       makeSentence('lake-1-s1', 0, 'On Sunday we take the train to the lake.', [['Am'], ['Sonntag'], ['fahren'], ['wir'], ['mit'], ['dem'], ['Zug'], ['an'], ['den', undefined, ['grammar-wechselpraeposition']], ['See', 'word-see'], ['.']], 0),
-      makeSentence('lake-1-s2', 1, 'At the shore we unpack bread, apples, and a thermos of tea.', [['Am', undefined, ['grammar-wechselpraeposition']], ['Ufer', 'word-ufer'], ['packen'], ['wir'], ['Brot'], [','], ['Äpfel'], ['und'], ['eine'], ['Thermoskanne'], ['Tee'], ['aus'], ['.']], 5_000),
+      makeSentence('lake-1-s2', 1, 'At the shore we unpack bread, apples, and a thermos of tea.', [['Am', undefined, ['grammar-wechselpraeposition']], ['Ufer', 'word-ufer'], ['packen'], ['wir'], ['Brot'], [','], ['Äpfel'], ['und'], ['eine'], ['Thermoskanne'], ['Tee'], ['aus'], ['.']], 5_000, { units: [lexicalGroup([2, 11], 'auspacken', 'unpack', 'separable-verb', ['grammar-separable-verbs'])] }),
     ], peopleAndPlaceNames: [{ name: 'Müggelsee', note: 'a large lake in eastern Berlin' }],
   },
   {
@@ -264,18 +345,18 @@ const chapterDefinitions: {
   },
   {
     id: 'tram-1', contentId: 'last-tram', number: 1, title: 'Kurz vor Mitternacht', summary: 'Nora gets on an almost empty tram.', estimatedMinutes: 7, access: 'premium', level: 'B2',
-    grammarPointIds: ['grammar-obwohl'], keywordIds: ['word-strassenbahn', 'word-bemerken'],
+    grammarPointIds: ['grammar-obwohl', 'grammar-reflexive-verbs', 'grammar-separable-verbs'], keywordIds: ['word-strassenbahn', 'word-bemerken'],
     sentences: [
-      makeSentence('tram-1-s1', 0, 'Although it was already late, Nora boarded the last tram.', [['Obwohl', undefined, ['grammar-obwohl']], ['es'], ['schon'], ['spät'], ['war'], [','], ['stieg'], ['Nora'], ['in'], ['die'], ['letzte'], ['Straßenbahn', 'word-strassenbahn'], ['ein'], ['.']], 0),
-      makeSentence('tram-1-s2', 1, 'Only after the doors closed did she notice the forgotten suitcase.', [['Erst'], ['als'], ['sich'], ['die'], ['Türen'], ['schlossen'], [','], ['bemerkte', 'word-bemerken'], ['sie'], ['den'], ['vergessenen'], ['Koffer'], ['.']], 6_200),
+      makeSentence('tram-1-s1', 0, 'Although it was already late, Nora boarded the last tram.', [['Obwohl', undefined, ['grammar-obwohl']], ['es'], ['schon'], ['spät'], ['war'], [','], ['stieg'], ['Nora'], ['in'], ['die'], ['letzte'], ['Straßenbahn', 'word-strassenbahn'], ['ein'], ['.']], 0, { units: [lexicalGroup([6, 12], 'einsteigen', 'boarded / got on', 'separable-verb', ['grammar-separable-verbs'])] }),
+      makeSentence('tram-1-s2', 1, 'Only after the doors closed did she notice the forgotten suitcase.', [['Erst'], ['als'], ['sich'], ['die'], ['Türen'], ['schlossen'], [','], ['bemerkte', 'word-bemerken'], ['sie'], ['den'], ['vergessenen'], ['Koffer'], ['.']], 6_200, { units: [lexicalGroup([2, 5], 'sich schließen', 'closed', 'reflexive-verb', ['grammar-reflexive-verbs'])] }),
     ], peopleAndPlaceNames: [{ name: 'Nora', note: 'a night-shift worker' }],
   },
   {
     id: 'sound-1', contentId: 'city-sound', number: 1, title: 'Die akustische Stadt', summary: 'Why familiar places feel different after sunset.', estimatedMinutes: 9, access: 'premium', level: 'C1',
-    grammarPointIds: ['grammar-nominalization'], keywordIds: ['word-geraeusch', 'word-wahrnehmen'],
+    grammarPointIds: ['grammar-nominalization', 'grammar-reflexive-verbs', 'grammar-separable-verbs'], keywordIds: ['word-geraeusch', 'word-wahrnehmen'],
     sentences: [
-      makeSentence('sound-1-s1', 0, 'When visual stimuli recede, the perception of quiet sounds intensifies.', [['Wenn'], ['visuelle'], ['Reize'], ['zurücktreten'], [','], ['verstärkt'], ['sich'], ['die'], ['Wahrnehmung', undefined, ['grammar-nominalization']], ['leiser'], ['Geräusche', 'word-geraeusch'], ['.']], 0),
-      makeSentence('sound-1-s2', 1, 'We suddenly perceive ventilation systems, distant steps, and the echo of courtyards.', [['Plötzlich'], ['nehmen', 'word-wahrnehmen'], ['wir'], ['Lüftungsanlagen'], [','], ['entfernte'], ['Schritte'], ['und'], ['das'], ['Echo'], ['der'], ['Höfe'], ['wahr'], ['.']], 6_100),
+      makeSentence('sound-1-s1', 0, 'When visual stimuli recede, the perception of quiet sounds intensifies.', [['Wenn'], ['visuelle'], ['Reize'], ['zurücktreten'], [','], ['verstärkt'], ['sich'], ['die'], ['Wahrnehmung', undefined, ['grammar-nominalization']], ['leiser'], ['Geräusche', 'word-geraeusch'], ['.']], 0, { units: [lexicalGroup([5, 6], 'sich verstärken', 'intensifies', 'reflexive-verb', ['grammar-reflexive-verbs'])] }),
+      makeSentence('sound-1-s2', 1, 'We suddenly perceive ventilation systems, distant steps, and the echo of courtyards.', [['Plötzlich'], ['nehmen', 'word-wahrnehmen'], ['wir'], ['Lüftungsanlagen'], [','], ['entfernte'], ['Schritte'], ['und'], ['das'], ['Echo'], ['der'], ['Höfe'], ['wahr'], ['.']], 6_100, { units: [lexicalGroup([1, 12], 'wahrnehmen', 'perceive', 'separable-verb', ['grammar-separable-verbs'], 'word-wahrnehmen')] }),
     ], peopleAndPlaceNames: [{ name: 'Berlin', note: "Germany's capital and a layered soundscape" }],
   },
   {
@@ -293,10 +374,10 @@ const chapterDefinitions: {
   },
   {
     id: 'atlas-2', contentId: 'silent-atlas', number: 2, title: 'Unter dem trockenen Kai', summary: 'The atlas leads Mara beneath a rebuilt riverfront.', estimatedMinutes: 7, access: 'free', level: 'C2',
-    grammarPointIds: ['grammar-indirect-speech'], keywordIds: ['word-wahrnehmen', 'word-geraeusch'],
+    grammarPointIds: ['grammar-indirect-speech', 'grammar-separable-verbs'], keywordIds: ['word-wahrnehmen', 'word-geraeusch'],
     sentences: [
       makeSentence('atlas-2-s1', 0, 'The next morning Mara followed the route, although the riverbank had been rebuilt so thoroughly that even the direction of the old lanes was barely discernible.', ['Am', 'nächsten', 'Morgen', 'folgte', 'Mara', 'der', 'Route', ',', 'obwohl', 'das', 'Ufer', 'so', 'gründlich', 'umgebaut', 'worden', 'war', ',', 'dass', 'selbst', 'die', 'Richtung', 'der', 'alten', 'Gassen', 'kaum', 'noch', 'erkennbar', 'blieb', '.'], 0),
-      makeSentence('atlas-2-s2', 1, 'Behind a delivery entrance she noticed a bricked-up arch whose proportions resembled not a cellar door but the mouth of a canal.', ['Hinter', 'einer', 'Lieferzufahrt', ['nahm', 'word-wahrnehmen'], 'sie', 'einen', 'zugemauerten', 'Bogen', 'wahr', ',', 'dessen', 'Proportionen', 'weniger', 'an', 'eine', 'Kellertür', 'als', 'an', 'die', 'Mündung', 'eines', 'Kanals', 'erinnerten', '.'], 10_000),
+      makeSentence('atlas-2-s2', 1, 'Behind a delivery entrance she noticed a bricked-up arch whose proportions resembled not a cellar door but the mouth of a canal.', ['Hinter', 'einer', 'Lieferzufahrt', ['nahm', 'word-wahrnehmen'], 'sie', 'einen', 'zugemauerten', 'Bogen', 'wahr', ',', 'dessen', 'Proportionen', 'weniger', 'an', 'eine', 'Kellertür', 'als', 'an', 'die', 'Mündung', 'eines', 'Kanals', 'erinnerten', '.'], 10_000, { units: [lexicalGroup([3, 8], 'wahrnehmen', 'noticed', 'separable-verb', ['grammar-separable-verbs'], 'word-wahrnehmen')] }),
       makeSentence('atlas-2-s3', 2, 'An elderly surveyor named Elias watched her compare the masonry with the atlas and asked quietly whether she too had received a blue map.', ['Ein', 'älterer', 'Vermessungsingenieur', 'namens', 'Elias', 'beobachtete', ',', 'wie', 'sie', 'das', 'Mauerwerk', 'mit', 'dem', 'Atlas', 'verglich', ',', 'und', 'fragte', 'leise', ',', 'ob', 'auch', 'sie', 'eine', 'blaue', 'Karte', 'erhalten', ['habe', undefined, ['grammar-indirect-speech']], '.'], 20_000),
       makeSentence('atlas-2-s4', 3, 'He said the plans had circulated for decades among families whose homes had vanished during a redevelopment that was officially considered exemplary.', ['Die', 'Pläne', ',', 'sagte', 'er', ',', ['seien', undefined, ['grammar-indirect-speech']], 'jahrzehntelang', 'unter', 'jenen', 'Familien', 'weitergegeben', 'worden', ',', 'deren', 'Wohnungen', 'bei', 'einer', 'offiziell', 'als', 'vorbildlich', 'geltenden', 'Sanierung', 'verschwunden', 'waren', '.'], 30_000),
       makeSentence('atlas-2-s5', 4, 'The erased river was in fact a narrow branch of the Spree, but its name had become shorthand for a neighborhood that no authority wanted to remember.', ['Der', 'getilgte', 'Fluss', ['sei', undefined, ['grammar-indirect-speech']], 'in', 'Wahrheit', 'ein', 'schmaler', 'Seitenarm', 'der', 'Spree', 'gewesen', ',', 'doch', 'sein', 'Name', 'habe', 'zugleich', 'für', 'ein', 'Viertel', 'gestanden', ',', 'an', 'das', 'keine', 'Behörde', 'erinnern', 'wollte', '.'], 40_000),
@@ -306,12 +387,15 @@ const chapterDefinitions: {
   },
   {
     id: 'atlas-3', contentId: 'silent-atlas', number: 3, title: 'Was die Karten verschweigen', summary: 'Mara must decide whether evidence belongs in an archive or in public.', estimatedMinutes: 6, access: 'free', level: 'C2',
-    grammarPointIds: ['grammar-indirect-speech'], keywordIds: ['word-erinnerung', 'word-zuverlaessig'],
+    grammarPointIds: ['grammar-indirect-speech', 'grammar-separable-verbs'], keywordIds: ['word-erinnerung', 'word-zuverlaessig'],
     sentences: [
       makeSentence('atlas-3-s1', 0, 'The recordings did not describe a conspiracy, but something more ordinary: hearings postponed, objections misplaced, and compensation promised but never paid.', ['Die', 'Aufnahmen', 'erzählten', 'von', 'keiner', 'Verschwörung', ',', 'sondern', 'von', 'etwas', 'Alltäglicherem', ':', 'vertagten', 'Anhörungen', ',', 'verlegten', 'Einsprüchen', 'und', 'Entschädigungen', ',', 'die', 'zugesagt', ',', 'aber', 'nie', 'gezahlt', 'worden', 'waren', '.'], 0),
       makeSentence('atlas-3-s2', 1, 'Mara understood that her grandfather had not mapped a secret river; he had given a visible form to a systematically displaced memory.', ['Mara', 'begriff', ',', 'dass', 'ihr', 'Großvater', 'keinen', 'geheimen', 'Fluss', 'kartiert', 'hatte', ',', 'sondern', 'einer', 'systematisch', 'verdrängten', ['Erinnerung', 'word-erinnerung'], 'eine', 'sichtbare', 'Form', 'gegeben', 'hatte', '.'], 10_000),
       makeSentence('atlas-3-s3', 2, 'Elias wanted to hand the material anonymously to the press, fearing the archive would bury it once more beneath procedural reservations.', ['Elias', 'wollte', 'das', 'Material', 'anonym', 'der', 'Presse', 'übergeben', ',', 'weil', 'er', 'fürchtete', ',', 'das', 'Archiv', 'werde', 'es', 'unter', 'verfahrensrechtlichen', 'Vorbehalten', 'abermals', 'begraben', '.'], 20_000),
-      makeSentence('atlas-3-s4', 3, 'Mara objected that evidence without a verifiable origin could be dismissed precisely by those whom it was meant to challenge.', ['Mara', 'wandte', 'ein', ',', 'Belege', 'ohne', ['zuverlässige', 'word-zuverlaessig'], 'Herkunft', 'ließen', 'sich', 'ausgerechnet', 'von', 'jenen', 'leicht', 'zurückweisen', ',', 'deren', 'Darstellung', 'sie', 'infrage', 'stellen', 'sollten', '.'], 30_000),
+      makeSentence('atlas-3-s4', 3, 'Mara objected that evidence without a verifiable origin could be dismissed precisely by those whom it was meant to challenge.', ['Mara', 'wandte', 'ein', ',', 'Belege', 'ohne', ['zuverlässige', 'word-zuverlaessig'], 'Herkunft', 'ließen', 'sich', 'ausgerechnet', 'von', 'jenen', 'leicht', 'zurückweisen', ',', 'deren', 'Darstellung', 'sie', 'infrage', 'stellen', 'sollten', '.'], 30_000, { units: [
+        lexicalGroup([1, 2], 'einwenden', 'objected', 'separable-verb', ['grammar-separable-verbs']),
+        lexicalGroup([19, 20], 'infrage stellen', 'challenge / call into question', 'phrase'),
+      ] }),
       makeSentence('atlas-3-s5', 4, 'They therefore designed an exhibition that placed each official plan beside the blue map and every administrative phrase beside a resident’s voice.', ['Sie', 'entwarfen', 'deshalb', 'eine', 'Ausstellung', ',', 'die', 'jedem', 'amtlichen', 'Plan', 'die', 'blaue', 'Karte', 'und', 'jeder', 'Verwaltungsformel', 'die', 'Stimme', 'einer', 'Bewohnerin', 'gegenüberstellte', '.'], 40_000),
       makeSentence('atlas-3-s6', 5, 'On opening night, visitors began adding their own missing places, until the supposedly precise city map became an unfinished web of recollections.', ['Am', 'Eröffnungsabend', 'begannen', 'die', 'Besucher', ',', 'eigene', 'verschwundene', 'Orte', 'einzutragen', ',', 'bis', 'aus', 'dem', 'vermeintlich', 'präzisen', 'Stadtplan', 'ein', 'unabgeschlossenes', 'Geflecht', 'von', 'Erinnerungen', 'wurde', '.'], 50_000),
       makeSentence('atlas-3-s7', 6, 'Mara finally wrote beneath her grandfather’s last line that a map does not lie when it leaves something out, but when it pretends nothing is missing.', ['Unter', 'die', 'letzte', 'Zeile', 'ihres', 'Großvaters', 'schrieb', 'Mara', 'schließlich', ',', 'eine', 'Karte', 'lüge', 'nicht', ',', 'wenn', 'sie', 'etwas', 'auslasse', ',', 'sondern', 'wenn', 'sie', 'behaupte', ',', 'es', 'fehle', 'nichts', '.'], 60_000),
